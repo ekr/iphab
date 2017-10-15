@@ -30,12 +30,13 @@ def checkout_branch(bname):
     return False
 
 def strip_file(infile, outfile):
-    stripped = subprocess.check_output(["awk", "-f", "strip.awk", infile])
+    stripped = subprocess.check_output(["awk", "-f", sys.path[0] + "/strip.awk", infile])
     o = open(outfile, "w")
     o.write(stripped)
     o.close()
     
 def add_file(fname):
+    global args
     # Reduce the file to the basic name
     draft_name = os.path.split(fname)[1]
     m = re.match(FILENAME_PATTERN, draft_name)
@@ -47,8 +48,13 @@ def add_file(fname):
     if m != None:
         base = m.group(1)
 
+    branch = "branch-%s"%base
+    # Delete branch if asked
+    if args.new:
+        subprocess.call(["git", "branch", "-D", branch])
+        
     # Check out a branch named after this basename
-    created = checkout_branch("branch-%s"%base)
+    created = checkout_branch(branch)
     
     base += ".txt"
     debug("Draft basename: %s"%base)
@@ -84,6 +90,7 @@ parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument("--file", dest="file", help="filename for draft", default=None)
 parser.add_argument("--draft", dest="draft", help="draft name (to be downloaded)", default=None)
 parser.add_argument('--verbose', dest='verbose', action='store_true')
+parser.add_argument('--new', dest="new", action='store_true')
 args = parser.parse_args()
 
 
@@ -100,6 +107,3 @@ if args.file != None:
     
 
         
-                              
-
-

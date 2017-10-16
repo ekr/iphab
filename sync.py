@@ -121,6 +121,12 @@ def update():
     sync_repo()
     man = read_id_manifest()
     db = read_db(DBNAME)
+    try:
+        update_inner(man, db)
+    except:
+        print "Error doing update"
+
+def update_inner(man, db):    
     for draft in man:
         version = man[draft]
         debug("Draft %s-%s"%(draft, version))
@@ -135,15 +141,17 @@ def update():
         debug("Uploaded as revision=%s"%revision)
         NEW.append("%s-%s: %s"%(draft, version, revision))
         db[draft] = { "version" : version, "revision_id" : revision}
-    save_db(DBNAME, db)
+        save_db(DBNAME, db)
 
     print "New drafts"
     for n in NEW:
         print "   ", n
-                   
     
 parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument('--verbose', dest='verbose', action='store_true')
 args = parser.parse_args()
 
-update()        
+try:
+    update()        
+except:
+    print "Error"

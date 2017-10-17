@@ -109,10 +109,14 @@ def upload_revision(draftname, version, revision_id):
     strip_file("%s/%s-%s.txt"%(DRAFTS_SUBDIR, draftname, version), dst)
     run_git(["add", "%s.txt"%draftname])
     run_git(["commit", "-m", "%s-%s"%(draftname, version)])
-    args = ["arc","diff","--verbatim","--allow-untracked","master"]
+    args = ["arc","diff","--allow-untracked","master"]
     if revision_id != None:
         args.append("--update")
         args.append(revision_id)
+        args.append("--message")
+        args.append("Update")
+    else:
+        args.append("--verbatim")
     output = run_sub(args)
     return get_revision(output)
 

@@ -71,11 +71,15 @@ def is_newer_version(a, b):
 def run_sub(cmd, ignore_errors = False):
     cwd = os.getcwd()
     os.chdir(GIT_REPO)
-    output = ""
-    if ignore_errors:
-        subprocess.call(cmd)
-    else:
-        output = subprocess.check_output(cmd)
+    try:
+        output = ""
+        if ignore_errors:
+            subprocess.call(cmd)
+        else:
+            output = subprocess.check_output(cmd)
+    except e:
+        os.chdir(cwd)
+        raise e
     os.chdir(cwd)
     return output
     
@@ -120,6 +124,47 @@ def upload_revision(draftname, version, revision_id):
     output = run_sub(args)
     return get_revision(output)
 
+
+# Assign reviewers to a draft
+def run_call_conduit(command, js):
+    cwd = os.getcwd()
+    val = json.dumps(js)
+    debug("Running: %s"%val)
+    os.chdir(GIT_REPO)
+    p = subprocess.Popen(["arc", "call-conduit", command],
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    (out, err) = p.communicate(json.dumps(js))
+    os.chdir(cwd)
+    if err != "":
+        raise "Error doing call-conduit: %s"%err
+    debug(out)
+    jj = json.loads(out)
+    if jj["error"] != None:
+        raise "Error doing call-conduit: %s"%err
+    return jj
+
+def lookup_user(reviewer):
+    j = run_call_conduit("user.query", {"usernames":[reviewer]})
+    if len(j["response"]) == 0:
+        return None
+    return j["response"][0]['phid']
+
+def add_reviewer(reviewer, revision, blocking):
+    u = lookup_user(reviewer)
+    if u == None:
+        die("Unknown user %s"%reviewer)
+    if blocking:
+        rev = "blocking(%s)"%u
+    else:
+        rev = u
+    r = run_call_conduit("differential.revision.edit",
+                         {
+                             "transactions" :
+                             [{"type":"reviewers.add", "value":[rev]}],
+                             "objectIdentifier":revision
+                         }
+                         )
+                                         
 # Master function
 def update():
     sync_repo()
@@ -153,9 +198,19 @@ def update_inner(man, db):
     
 parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument('--verbose', dest='verbose', action='store_true')
+parser.add_argument('operation', nargs=1)
+parser.add_argument('args', nargs='*')
 args = parser.parse_args()
 
-try:
-    update()        
-except:
-    print "Error"
+if args.operation[0] == "update":
+    update()
+elif args.operation[0] == "add-reviewer":
+    if len(args.args) != 2:
+        die("Bogus arguments to add-reviewer")
+    add_reviewer(args.args[0], args.args[1], False)
+elif args.operation[0] == "add-blocking-reviewer":
+    if len(args.args) != 2:
+        die("Bogus arguments to add-blocking-reviewer")
+    add_reviewer(args.args[0], args.args[1], True)
+else:
+    die("Invalid operation %s"%args.operation)

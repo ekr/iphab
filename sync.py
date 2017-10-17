@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib2
 
 DRAFT_PATTERN="(draft-[a-zA-Z0-9-\._\+]+)-([0-9][0-9])$"
 DBNAME = "drafts.db"
@@ -18,6 +19,9 @@ def debug(msg):
     if args.verbose:
         print msg
 
+def warn(msg):
+    print "Warning: %s"%msg
+    
 def die(msg):
     print msg
     sys.exit(1)
@@ -164,18 +168,51 @@ def add_reviewer(reviewer, revision, blocking):
                              "objectIdentifier":revision
                          }
                          )
-                                         
+
+# Assign reviewers based on the IESG Agenda
+def download_agenda():
+    u = urllib2.urlopen("https://datatracker.ietf.org/iesg/agenda/agenda.json")
+    js = u.read()
+    return json.loads(js)
+
+def assign_reviewers_from_agenda(agenda, reviewers):
+    debug("Agenda: %s"%agenda)
+    db = read_db(DBNAME)
+    for sn, sec in agenda["sections"].iteritems():
+        if "docs" in sec:
+            for doc in sec["docs"]:
+                docname = doc["docname"]
+                if not docname.startswith("draft-"):
+                    warn("Invalid draft name %s"%docname)
+                    continue
+                blocking = False
+                if doc["intended-std-level"].find("Standard") > -1:
+                    blocking = True
+                # Find the revision
+                if not docname in db:
+                    warn("No Differential revision found for %s"%docname)
+                revision = db[docname]["revision_id"]
+                debug("Adding reviewers for %s, revision=%s, blocking=%s"%(docname, revision, blocking))
+                for rev in reviewers:
+                    add_reviewer(rev, revision, blocking)
+                
+
+def update_agenda(reviewers):
+    agenda = download_agenda()
+    assign_reviewers_from_agenda(agenda, reviewers)
+    
+    
 # Master function
-def update():
+def update_drafts():
     sync_repo()
     man = read_id_manifest()
     db = read_db(DBNAME)
     try:
-        update_inner(man, db)
+        update_drafts_inner(man, db)
     except:
         print "Error doing update"
 
-def update_inner(man, db):    
+def update_drafts_inner(man, db):    
     for draft in man:
         version = man[draft]
         debug("Draft %s-%s"%(draft, version))
@@ -202,8 +239,8 @@ parser.add_argument('operation', nargs=1)
 parser.add_argument('args', nargs='*')
 args = parser.parse_args()
 
-if args.operation[0] == "update":
-    update()
+if args.operation[0] == "update-drafts":
+    update_drafts()
 elif args.operation[0] == "add-reviewer":
     if len(args.args) != 2:
         die("Bogus arguments to add-reviewer")
@@ -212,5 +249,9 @@ elif args.operation[0] == "add-blocking-reviewer":
     if len(args.args) != 2:
         die("Bogus arguments to add-blocking-reviewer")
     add_reviewer(args.args[0], args.args[1], True)
+elif args.operation[0] == "update-agenda":
+    if len(args.args) < 1:
+        die("Need to specify at least one reviewer")
+    update_agenda(args.args)
 else:
     die("Invalid operation %s"%args.operation)

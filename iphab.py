@@ -223,10 +223,13 @@ def update_drafts_inner(man, db):
             if not is_newer_version(version, db[draft]["version"]):
                 continue
         # Either this is new or it's updated, so upload
-        revision = upload_revision(draft, version, revision)
-        debug("Uploaded as revision=%s"%revision)
-        NEW.append("%s-%s: %s"%(draft, version, revision))
-        db[draft] = { "version" : version, "revision_id" : revision}
+        try:
+            revision = upload_revision(draft, version, revision)
+            debug("Uploaded as revision=%s"%revision)
+            NEW.append("%s-%s: %s"%(draft, version, revision))
+            db[draft] = { "version" : version, "revision_id" : revision}
+        except:
+            print "Error"
         save_db(DBNAME, db)
 
     print "New drafts"
@@ -235,23 +238,17 @@ def update_drafts_inner(man, db):
     
 parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument('--verbose', dest='verbose', action='store_true')
-parser.add_argument('operation', nargs=1)
-parser.add_argument('args', nargs='*')
+subparsers = parser.add_subparsers(help="operation", dest="operation")
+subparser_update_drafts = subparsers.add_parser("update-drafts", help="Update the drafts")
+subparser_update_agenda = subparsers.add_parser("update-agenda", help="Update the agenda")
+subparser_update_agenda.add_argument("reviewer", nargs=1, help="Reviewer")
+subparser_add_reviewer = subparsers.add_parser("add-reviewer", help="Add a reviewer")
+
 args = parser.parse_args()
 
-if args.operation[0] == "update-drafts":
+if args.operation ==  "update-drafts":
     update_drafts()
-elif args.operation[0] == "add-reviewer":
-    if len(args.args) != 2:
-        die("Bogus arguments to add-reviewer")
-    add_reviewer(args.args[0], args.args[1], False)
-elif args.operation[0] == "add-blocking-reviewer":
-    if len(args.args) != 2:
-        die("Bogus arguments to add-blocking-reviewer")
-    add_reviewer(args.args[0], args.args[1], True)
-elif args.operation[0] == "update-agenda":
-    if len(args.args) < 1:
-        die("Need to specify at least one reviewer")
-    update_agenda(args.args)
-else:
-    die("Invalid operation %s"%args.operation)
+elif args.operation == "update-agenda":
+    update_drafts()
+    update_agenda(args.reviewer)
+

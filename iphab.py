@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import textwrap
+import urllib
 import urllib2
 
 DRAFT_PATTERN="(draft-[a-zA-Z0-9-\._\+]+)-([0-9][0-9])$"
@@ -14,6 +15,8 @@ DRAFTS_SUBDIR = "ids"
 GIT_REPO = "ietf-review"
 GIT_UPLOAD_BRANCH = "upload"
 NEW = []
+APIKEY = "EAAAAFndZmU4QEdgqzyRHjUQbEHyXtenc7RttudhF4mz_3xtU-gD85BUtQD0RveL"
+DATATRACKER = "https://sandbox.ietf.org"
 
 def debug(msg):
     global args
@@ -259,6 +262,8 @@ def format_overall(event):
     return "\n".join([reflow(c["content"]["raw"]) for c in event["comments"] if c["content"]["raw"] != "Update"])
         
 def ballot_draft(docname):
+    apikey = "DwAAAGXnpw_l_kMqjpwRIGPztDRgfj8G4iGc9kH4QJ2A9gtu96SpXVLu4ctnilPl"
+    
     # Find the revision
     db = read_db(DBNAME)
     if not docname in db:
@@ -282,7 +287,7 @@ def ballot_draft(docname):
     # Now interpolate the comments into the diff.
     important = []
     comments = []
-    overall = ""
+    overall = "Phabricator: https://mozphab-ietf.devsvcdev.mozaws.net/" + db[docname]["revision_id"] + "\n"
     status = None
     
     for event in result:
@@ -305,33 +310,41 @@ def ballot_draft(docname):
         else:
             comments.append(c)
 
-    output = ""
-    
+    output = []
+
     if status == "accepted":
         debug("Accepted, balloting no-objection")
-        output = []
         output.append(overall)
         if len(important) > 0:
             output.append("IMPORTANT\n"+format_comments(important))
         if len(comments) > 0 :
             output.append("COMMENTS\n"+format_comments(comments))
-        print "\n\n".join(output)
+        post_ballot(apikey, docname, "noobj", None, "\n\n".join(output))
     elif status == "needs-revision":
         debug("needs-revision balloting DISCUSS")
-        output = []
-        output.append(overall)
         if len(important) > 0:
             output.append("DETAIL\n"+format_comments(important))
-        if len(comments) > 0 :
-            output.append("COMMENTS\n"+format_comments(comments))
-        print "\n\n".join(output)
-            
+        post_ballot(apikey, docname, "discuss", "\n\n".join(output), format_comments(comments))
     else:
         die("No or unknown status recorded. Cannot ballot")
+    
+def post_ballot(apikey, draft, position, discuss, comment):
+    api = "/api/iesg/position"
+    
+    submit = {
+        "apikey" : APIKEY,
+        "doc" : draft,
+        "position" : position,
+    }
+    if discuss is not None:
+       submit["discuss"] = discuss
+    if comment is not None:
+        submit["comment"] = comment
 
-            
-        
-
+    req = urllib2.Request(DATATRACKER + api, urllib.urlencode(submit))
+    url = urllib2.urlopen(req)
+    resp = url.read()
+    debug(resp)
         
     
 # Master function

@@ -223,7 +223,7 @@ def clean_diff(js):
     if not lines[3].startswith("+++"):
         raise ValueError("Malformed")
     
-    return ["    " + l[1:] for l in lines[6:]]
+    return [">   " + l[1:] for l in lines[6:]]
 
 def format_comment(diff, comment):
     context = 6

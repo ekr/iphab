@@ -15,7 +15,7 @@ DRAFTS_SUBDIR = "ids"
 GIT_REPO = "ietf-review"
 GIT_UPLOAD_BRANCH = "upload"
 NEW = []
-APIKEY = "EAAAAFndZmU4QEdgqzyRHjUQbEHyXtenc7RttudhF4mz_3xtU-gD85BUtQD0RveL"
+APIKEY = None
 DATATRACKER = "https://sandbox.ietf.org"
 
 def debug(msg):
@@ -322,6 +322,7 @@ def ballot_draft(docname):
         post_ballot(apikey, docname, "noobj", None, "\n\n".join(output))
     elif status == "needs-revision":
         debug("needs-revision balloting DISCUSS")
+        output.append(overall)        
         if len(important) > 0:
             output.append("DETAIL\n"+format_comments(important))
         post_ballot(apikey, docname, "discuss", "\n\n".join(output), format_comments(comments))
@@ -346,6 +347,11 @@ def post_ballot(apikey, draft, position, discuss, comment):
     resp = url.read()
     debug(resp)
         
+
+def read_api_key():
+    global APIKEY
+    f = open(".apikey")
+    APIKEY = f.read().strip()
     
 # Master function
 def update_drafts():
@@ -399,6 +405,8 @@ elif args.operation == "update-agenda":
     update_drafts()
     update_agenda(args.reviewer)
 elif args.operation == "ballot":
+    read_api_key()
+    debug("API key="+APIKEY)
     ballot_draft(args.draft[0])
 
 

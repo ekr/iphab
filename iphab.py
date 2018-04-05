@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import textwrap
 import urllib2
 
 DRAFT_PATTERN="(draft-[a-zA-Z0-9-\._\+]+)-([0-9][0-9])$"
@@ -140,6 +141,7 @@ def run_call_conduit(command, js):
     (out, err) = p.communicate(json.dumps(js))
     os.chdir(cwd)
     if err != "":
+        print err
         raise "Error doing call-conduit: %s"%err
     debug(out)
     jj = json.loads(out)
@@ -201,6 +203,136 @@ def update_agenda(reviewers):
     agenda = download_agenda()
     assign_reviewers_from_agenda(agenda, reviewers)
     
+
+
+# Ballot on a draft
+def reflow(txt):
+    return "\n".join(textwrap.wrap(txt))
+
+def clean_diff(js):
+    lines = js["response"].split("\n")
+    if not lines[0].startswith("diff"):
+        raise ValueError("Malformed")
+    if not lines[1].startswith("new file"):
+        raise ValueError("Malformed")        
+    if not lines[2].startswith("---"):
+        raise ValueError("Malformed")        
+    if not lines[3].startswith("+++"):
+        raise ValueError("Malformed")
+    
+    return ["    " + l[1:] for l in lines[6:]]
+
+def format_comment(diff, comment):
+    context = 6
+    important = False
+    last_line = comment["fields"]["line"] - 1
+    first_line = max(0, last_line - context)
+    txt = "\n".join(diff[first_line:last_line])
+    txt += "\n"
+    for c in comment["comments"]:
+        raw = c["content"]["raw"]
+        if raw.startswith("IMPORTANT"):
+            important = True
+        txt += "\n"
+        txt += reflow(raw)
+    
+    comment = [
+        last_line,
+        important,
+        txt
+    ]
+    return comment
+
+
+def format_comments(comments):
+    l = ""
+    first = True
+    for c in comments:
+        if not first:
+            l += "\n\n\n"
+        first = False
+        l += c[2]
+
+    return l
+
+def format_overall(event):
+    return "\n".join([reflow(c["content"]["raw"]) for c in event["comments"] if c["content"]["raw"] != "Update"])
+        
+def ballot_draft(docname):
+    # Find the revision
+    db = read_db(DBNAME)
+    if not docname in db:
+        warn("No Differential revision found for %s"%docname)
+
+    # Now get all the events
+    j = run_call_conduit("transaction.search", {"objectIdentifier":db[docname]["revision_id"]})
+    result = j["response"]["data"]
+
+    last_diff = 0
+    for event in result:
+        if event["type"] != "inline":
+            continue
+        if last_diff < event["fields"]["diff"]["id"]:
+            last_diff = event["fields"]["diff"]["id"]
+
+    # Now get the diff
+    diff = run_call_conduit("differential.getrawdiff", {"diffID":last_diff})
+    diff = clean_diff(diff)
+
+    # Now interpolate the comments into the diff.
+    important = []
+    comments = []
+    overall = ""
+    status = None
+    
+    for event in result:
+        if event["type"] == "comment":
+            overall += "\n" + format_overall(event)
+
+        if event["type"] == "status":
+            if status == None:
+                status = event["fields"]["new"]
+                overall += "\n" + format_overall(event)
+            
+        if event["type"] != "inline":
+            continue
+
+
+        
+        c = format_comment(diff, event)
+        if c[1]:
+            important.append(c)
+        else:
+            comments.append(c)
+
+    output = ""
+    
+    if status == "accepted":
+        debug("Accepted, balloting no-objection")
+        output = []
+        output.append(overall)
+        if len(important) > 0:
+            output.append("IMPORTANT\n"+format_comments(important))
+        if len(comments) > 0 :
+            output.append("COMMENTS\n"+format_comments(comments))
+        print "\n\n".join(output)
+    elif status == "needs-revision":
+        debug("needs-revision balloting DISCUSS")
+        output = []
+        output.append(overall)
+        if len(important) > 0:
+            output.append("DETAIL\n"+format_comments(important))
+        if len(comments) > 0 :
+            output.append("COMMENTS\n"+format_comments(comments))
+        print "\n\n".join(output)
+            
+    else:
+        die("No or unknown status recorded. Cannot ballot")
+
+            
+        
+
+        
     
 # Master function
 def update_drafts():
@@ -228,8 +360,8 @@ def update_drafts_inner(man, db):
             debug("Uploaded as revision=%s"%revision)
             NEW.append("%s-%s: %s"%(draft, version, revision))
             db[draft] = { "version" : version, "revision_id" : revision}
-        except:
-            print "Error"
+        except e:
+            print "Error: %s"%e
         save_db(DBNAME, db)
 
     print "New drafts"
@@ -243,6 +375,8 @@ subparser_update_drafts = subparsers.add_parser("update-drafts", help="Update th
 subparser_update_agenda = subparsers.add_parser("update-agenda", help="Update the agenda")
 subparser_update_agenda.add_argument("reviewer", nargs=1, help="Reviewer")
 subparser_add_reviewer = subparsers.add_parser("add-reviewer", help="Add a reviewer")
+subparser_ballot = subparsers.add_parser("ballot", help="Generate a ballot")
+subparser_ballot.add_argument("draft", nargs=1, help="draft-name")
 
 args = parser.parse_args()
 
@@ -251,4 +385,7 @@ if args.operation ==  "update-drafts":
 elif args.operation == "update-agenda":
     update_drafts()
     update_agenda(args.reviewer)
+elif args.operation == "ballot":
+    ballot_draft(args.draft[0])
+
 

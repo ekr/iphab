@@ -16,7 +16,7 @@ GIT_REPO = "ietf-review"
 GIT_UPLOAD_BRANCH = "upload"
 NEW = []
 APIKEY = None
-DATATRACKER = "https://sandbox.ietf.org"
+DATATRACKER = "https://datatracker.ietf.org"
 
 def debug(msg):
     global args
@@ -210,7 +210,8 @@ def update_agenda(reviewers):
 
 # Ballot on a draft
 def reflow(txt):
-    return "\n".join(textwrap.wrap(txt))
+    reflowed = ["\n".join(textwrap.wrap(l)) for l in txt.split("\n")]
+    return "\n".join(reflowed)
 
 def clean_diff(js):
     lines = js["response"].split("\n")
@@ -234,8 +235,11 @@ def format_comment(diff, comment):
     txt += "\n"
     for c in comment["comments"]:
         raw = c["content"]["raw"]
-        if raw.startswith("IMPORTANT"):
+        m = re.match("IMPORTANT:\s*(.*)", raw)
+        if m is not None:
+            raw = m.group(1)
             important = True
+            
         txt += "\n"
         txt += reflow(raw)
     
@@ -248,9 +252,10 @@ def format_comment(diff, comment):
 
 
 def format_comments(comments):
+    c2 = sorted(comments, key = lambda x: x[0])
     l = ""
     first = True
-    for c in comments:
+    for c in c2:
         if not first:
             l += "\n\n\n"
         first = False
@@ -260,10 +265,8 @@ def format_comments(comments):
 
 def format_overall(event):
     return "\n".join([reflow(c["content"]["raw"]) for c in event["comments"] if c["content"]["raw"] != "Update"])
-        
-def ballot_draft(docname):
-    apikey = "DwAAAGXnpw_l_kMqjpwRIGPztDRgfj8G4iGc9kH4QJ2A9gtu96SpXVLu4ctnilPl"
-    
+
+def retrieve_comments(docname):
     # Find the revision
     db = read_db(DBNAME)
     if not docname in db:
@@ -287,7 +290,7 @@ def ballot_draft(docname):
     # Now interpolate the comments into the diff.
     important = []
     comments = []
-    overall = "Phabricator: https://mozphab-ietf.devsvcdev.mozaws.net/" + db[docname]["revision_id"] + "\n"
+    overall = "Rich version of this review at:\nhttps://mozphab-ietf.devsvcdev.mozaws.net/" + db[docname]["revision_id"] + "\n"
     status = None
     
     for event in result:
@@ -310,6 +313,13 @@ def ballot_draft(docname):
         else:
             comments.append(c)
 
+    debug("Status = %s"%status)
+    
+    return status, overall, important, comments
+    
+def ballot_draft(docname):
+    status, overall, important, comments = retrieve_comments(docname)
+    
     output = []
 
     if status == "accepted":
@@ -319,13 +329,13 @@ def ballot_draft(docname):
             output.append("IMPORTANT\n"+format_comments(important))
         if len(comments) > 0 :
             output.append("COMMENTS\n"+format_comments(comments))
-        post_ballot(apikey, docname, "noobj", None, "\n\n".join(output))
+        post_ballot(APIKEY, docname, "noobj", None, "\n\n".join(output))
     elif status == "needs-revision":
         debug("needs-revision balloting DISCUSS")
         output.append(overall)        
         if len(important) > 0:
             output.append("DETAIL\n"+format_comments(important))
-        post_ballot(apikey, docname, "discuss", "\n\n".join(output), format_comments(comments))
+        post_ballot(APIKEY, docname, "discuss", "\n\n".join(output), format_comments(comments))
     else:
         die("No or unknown status recorded. Cannot ballot")
     
@@ -342,8 +352,16 @@ def post_ballot(apikey, draft, position, discuss, comment):
     if comment is not None:
         submit["comment"] = comment
 
-    req = urllib2.Request(DATATRACKER + api, urllib.urlencode(submit))
-    url = urllib2.urlopen(req)
+    u = DATATRACKER + api
+    debug("URL = %s"%u)
+    sub = urllib.urlencode(submit)
+    debug("SUB = %s"%sub)
+    req = urllib2.Request(u, sub)
+    url = None
+    try:
+        url = urllib2.urlopen(req)
+    except Exception as e:
+        die("Error posting ballot. %s --> %s"%(str(e), e.read()))
     resp = url.read()
     debug(resp)
         
@@ -352,7 +370,55 @@ def read_api_key():
     global APIKEY
     f = open(".apikey")
     APIKEY = f.read().strip()
-    
+
+def download_review(docname, out):
+    status, overall, important, comments = retrieve_comments(docname)
+
+    output = []
+
+    output.append(overall)
+    if len(important) > 0:
+        output.append("IMPORTANT\n"+format_comments(important))
+    if len(comments) > 0 :
+        output.append("COMMENTS\n"+format_comments(comments))
+
+    out = open("%s/%s-rev.txt"%(out,docname), "w")
+    out.write("\n".join(output))
+    out.close()
+
+def find_revision(docname):
+    db = read_db(DBNAME)
+    if not docname in db:
+        die("No Differential revision found for %s"%docname)
+    print db[docname]
+
+
+def clear_requests(reviewer):
+    u = lookup_user(reviewer)
+    if u == None:
+        die("Unknown user %s"%reviewer)
+    debug("User %s -> PHID %s"%(reviewer, u))
+
+    r = run_call_conduit("differential.revision.search",
+                         {
+                             "constraints": {"reviewerPHIDs" : [ u ] }
+                         }
+                         )
+    debug(r)
+
+    for rev in r["response"]["data"]:
+        if rev["fields"]["status"]["value"] != "needs-review":
+            continue
+        debug("Clearing request for %s"%rev["phid"])
+        r = run_call_conduit("differential.revision.edit",
+                             {
+                                 "transactions" :
+                                 [{"type":"reviewers.remove", "value":[u]}],
+                                 "objectIdentifier":rev["phid"]
+                             }
+        )
+
+        
 # Master function
 def update_drafts():
     sync_repo()
@@ -386,7 +452,12 @@ def update_drafts_inner(man, db):
     print "New drafts"
     for n in NEW:
         print "   ", n
-    
+
+
+rcf = open(".iphab.json", "r")
+RC = json.load(rcf)
+rcf.close()
+
 parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument('--verbose', dest='verbose', action='store_true')
 subparsers = parser.add_subparsers(help="operation", dest="operation")
@@ -396,6 +467,11 @@ subparser_update_agenda.add_argument("reviewer", nargs=1, help="Reviewer")
 subparser_add_reviewer = subparsers.add_parser("add-reviewer", help="Add a reviewer")
 subparser_ballot = subparsers.add_parser("ballot", help="Generate a ballot")
 subparser_ballot.add_argument("draft", nargs=1, help="draft-name")
+subparser_download = subparsers.add_parser("download-review", help="Download a review")
+subparser_download.add_argument("draft", nargs=1, help="draft-name")
+subparser_find = subparsers.add_parser("find-revision", help="Find a revision")
+subparser_find.add_argument("draft", nargs=1, help="draft-name")
+subparser_clear = subparsers.add_parser("clear-requests")
 
 args = parser.parse_args()
 
@@ -408,5 +484,16 @@ elif args.operation == "ballot":
     read_api_key()
     debug("API key="+APIKEY)
     ballot_draft(args.draft[0])
+elif args.operation == "download-review":
+    if not "review-dir" in RC:
+        die("Can't download without review-dir configured")
+    download_review(args.draft[0], RC["review-dir"])
+elif args.operation == "find-revision":
+    find_revision(args.draft[0])
+elif args.operation == "clear-requests":
+    if not "reviewer" in RC:
+        die("Can't clear requests without configuring reviewer")
+    clear_requests(RC["reviewer"])
 
+    
 

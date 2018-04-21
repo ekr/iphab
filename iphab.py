@@ -15,7 +15,6 @@ DRAFTS_SUBDIR = "ids"
 GIT_REPO = "ietf-review"
 GIT_UPLOAD_BRANCH = "upload"
 NEW = []
-APIKEY = None
 DATATRACKER = "https://datatracker.ietf.org"
 
 def debug(msg):
@@ -202,9 +201,9 @@ def assign_reviewers_from_agenda(agenda, reviewers):
                     add_reviewer(rev, revision, blocking)
                 
 
-def update_agenda(reviewers):
+def update_agenda(reviewer):
     agenda = download_agenda()
-    assign_reviewers_from_agenda(agenda, reviewers)
+    assign_reviewers_from_agenda(agenda, [reviewer])
     
 
 
@@ -329,13 +328,13 @@ def ballot_draft(docname):
             output.append("IMPORTANT\n"+format_comments(important))
         if len(comments) > 0 :
             output.append("COMMENTS\n"+format_comments(comments))
-        post_ballot(APIKEY, docname, "noobj", None, "\n\n".join(output))
+        post_ballot(RC["apikey"], docname, "noobj", None, "\n\n".join(output))
     elif status == "needs-revision":
         debug("needs-revision balloting DISCUSS")
         output.append(overall)        
         if len(important) > 0:
             output.append("DETAIL\n"+format_comments(important))
-        post_ballot(APIKEY, docname, "discuss", "\n\n".join(output), format_comments(comments))
+        post_ballot(RC["apikey"], docname, "discuss", "\n\n".join(output), format_comments(comments))
     else:
         die("No or unknown status recorded. Cannot ballot")
     
@@ -343,7 +342,7 @@ def post_ballot(apikey, draft, position, discuss, comment):
     api = "/api/iesg/position"
     
     submit = {
-        "apikey" : APIKEY,
+        "apikey" : RC["apikey"],
         "doc" : draft,
         "position" : position,
     }
@@ -365,11 +364,6 @@ def post_ballot(apikey, draft, position, discuss, comment):
     resp = url.read()
     debug(resp)
         
-
-def read_api_key():
-    global APIKEY
-    f = open(".apikey")
-    APIKEY = f.read().strip()
 
 def download_review(docname, out):
     status, overall, important, comments = retrieve_comments(docname)
@@ -463,7 +457,6 @@ parser.add_argument('--verbose', dest='verbose', action='store_true')
 subparsers = parser.add_subparsers(help="operation", dest="operation")
 subparser_update_drafts = subparsers.add_parser("update-drafts", help="Update the drafts")
 subparser_update_agenda = subparsers.add_parser("update-agenda", help="Update the agenda")
-subparser_update_agenda.add_argument("reviewer", nargs=1, help="Reviewer")
 subparser_add_reviewer = subparsers.add_parser("add-reviewer", help="Add a reviewer")
 subparser_ballot = subparsers.add_parser("ballot", help="Generate a ballot")
 subparser_ballot.add_argument("draft", nargs=1, help="draft-name")
@@ -478,11 +471,11 @@ args = parser.parse_args()
 if args.operation ==  "update-drafts":
     update_drafts()
 elif args.operation == "update-agenda":
+    if not "reviewer" in RC:
+        die("Can't update agenda without configuring reviewer")
     update_drafts()
-    update_agenda(args.reviewer)
+    update_agenda(RC["reviewer"])
 elif args.operation == "ballot":
-    read_api_key()
-    debug("API key="+APIKEY)
     ballot_draft(args.draft[0])
 elif args.operation == "download-review":
     if not "review-dir" in RC:

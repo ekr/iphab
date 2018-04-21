@@ -20,6 +20,38 @@ Major features:
 
 - Post reviewed revisions on the IETF Ballot tool.
 
+The intent is that eventually much of this will run on a server
+and keep Phabricator in sync, but at the moment it's kind of
+manual and really only set up for one person to use. Contact
+@ekr if you want to share the existing instance, and I'll
+make the minor updates.
+
+
+## Setup
+
+
+### Prerequisites
+
+1. Install the Phabricator [Arcanist tool](https://secure.phabricator.com/book/phabricator/article/arcanist/).
+
+2. Check out the dummy IETF review at https://github.com/ekr/ietf-review
+
+3. Create the arcconfig in the repo. I use:
+
+   ```
+   {
+     "phabricator.uri" : "https://mozphab-ietf.devsvcdev.mozaws.net/"
+   }
+   ```
+   
+3. Initialize arcanist in the repo. You'll want a daaemon account other than the one you use for
+   actual review, because you can't really review your own revisions. I use "ekr-moz" for this.
+   Anyway ```arc install-certificate```.
+   
+
+
+
+
 
 
 

@@ -225,12 +225,21 @@ def clean_diff(js):
     
     return [">   " + l[1:] for l in lines[6:]]
 
+def find_section(diff, line):
+    for x in range(line, 0, -1):
+        m = re.match(">   (\d\S+)", diff[x])
+        if m is not None:
+            return "S %s"%m.group(1)
+    return ""
+                     
 def format_comment(diff, comment):
     context = 6
     important = False
     last_line = comment["fields"]["line"] - 1
     first_line = max(0, last_line - context)
-    txt = "\n".join(diff[first_line:last_line])
+    txt = find_section(diff, last_line)
+    txt += "\n"
+    txt += "\n".join(diff[first_line:last_line])
     txt += "\n"
     for c in comment["comments"]:
         raw = c["content"]["raw"]

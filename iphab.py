@@ -16,6 +16,7 @@ GIT_REPO = "ietf-review"
 GIT_UPLOAD_BRANCH = "upload"
 NEW = []
 DATATRACKER = "https://datatracker.ietf.org"
+RC = None
 
 def debug(msg):
     global args
@@ -274,7 +275,10 @@ def format_comments(comments):
 def format_overall(event):
     return "\n".join([reflow(c["content"]["raw"]) for c in event["comments"] if c["content"]["raw"] != "Update"])
 
-def retrieve_comments(docname):
+def retrieve_comments(docname, reviewer):
+    # Get my PHID
+    username = lookup_user(reviewer)
+
     # Find the revision
     db = read_db(DBNAME)
     if not docname in db:
@@ -303,6 +307,8 @@ def retrieve_comments(docname):
     
     for event in result:
         if event["type"] == "comment":
+            if event["authorPHID"] != username:
+                continue
             overall += "\n" + format_overall(event)
 
         if event["type"] == "status":
@@ -313,7 +319,8 @@ def retrieve_comments(docname):
         if event["type"] != "inline":
             continue
 
-
+        if event["authorPHID"] != username:
+            continue
         
         c = format_comment(diff, event)
         if c[1]:
@@ -375,7 +382,7 @@ def post_ballot(apikey, draft, position, discuss, comment):
         
 
 def download_review(docname, out):
-    status, overall, important, comments = retrieve_comments(docname)
+    status, overall, important, comments = retrieve_comments(docname, RC["reviewer"])
 
     output = []
 
@@ -385,9 +392,12 @@ def download_review(docname, out):
     if len(comments) > 0 :
         output.append("COMMENTS\n"+format_comments(comments))
 
-    out = open("%s/%s-rev.txt"%(out,docname), "w")
-    out.write("\n".join(output))
-    out.close()
+    if out is None:
+        of = sys.stdout
+    else:
+        of = open("%s/%s-rev.txt"%(out,docname), "w")
+    of.write("\n".join(output))
+    of.write("\n")
 
 def find_revision(docname):
     db = read_db(DBNAME)
@@ -457,9 +467,17 @@ def update_drafts_inner(man, db):
         print "   ", n
 
 
-rcf = open(".iphab.json", "r")
-RC = json.load(rcf)
-rcf.close()
+def read_config_file():
+    global RC
+    rcf = open(".iphab.json", "r")
+    RC = json.load(rcf)
+
+def ensure_config(k):
+    if not k in RC:
+        die("Value %s not configured"%k)
+    return RC[k]
+        
+read_config_file()
 
 parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument('--verbose', dest='verbose', action='store_true')
@@ -471,30 +489,32 @@ subparser_ballot = subparsers.add_parser("ballot", help="Generate a ballot")
 subparser_ballot.add_argument("draft", nargs=1, help="draft-name")
 subparser_download = subparsers.add_parser("download-review", help="Download a review")
 subparser_download.add_argument("draft", nargs=1, help="draft-name")
+subparser_download.add_argument("--stdout", dest="stdout", action="store_true")
 subparser_find = subparsers.add_parser("find-revision", help="Find a revision")
 subparser_find.add_argument("draft", nargs=1, help="draft-name")
 subparser_clear = subparsers.add_parser("clear-requests")
 
 args = parser.parse_args()
 
+
 if args.operation ==  "update-drafts":
     update_drafts()
 elif args.operation == "update-agenda":
-    if not "reviewer" in RC:
-        die("Can't update agenda without configuring reviewer")
+    ensure_config("reviewer")
     update_drafts()
     update_agenda(RC["reviewer"])
 elif args.operation == "ballot":
     ballot_draft(args.draft[0])
 elif args.operation == "download-review":
-    if not "review-dir" in RC:
-        die("Can't download without review-dir configured")
-    download_review(args.draft[0], RC["review-dir"])
+    ensure_config("reviewer")
+    to = None
+    if args.stdout is False:
+        to = ensure_config("review-dir")
+    download_review(args.draft[0], to)
 elif args.operation == "find-revision":
     find_revision(args.draft[0])
 elif args.operation == "clear-requests":
-    if not "reviewer" in RC:
-        die("Can't clear requests without configuring reviewer")
+    ensure_config("reviewer")
     clear_requests(RC["reviewer"])
 
     

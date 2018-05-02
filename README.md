@@ -16,13 +16,10 @@ Major features:
 
 - Post reviewed revisions on the IETF Ballot tool.
 
-The intent is that eventually much of this will run on a server
-and keep Phabricator in sync, but at the moment it's kind of
-manual and really only set up for one person to use. Contact
-me if you want to share the existing instance.
-
-The bugs that need to be fixed to make this work are #1 and #2.
-
+The intent is that eventually much of this will run on a server and
+keep Phabricator in sync, but at the moment it's kind of manual and
+needs one person to drive it, though multiple people can review.
+Email me if you want to share the existing instance.
 
 
 ## Setup

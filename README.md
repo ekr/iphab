@@ -50,7 +50,7 @@ and is called ```.iphab.json``` and looks like:
    {
     "review-dir" : "<where you want downloaded reviews to go>",
     "reviewer": "<your phabricator username>",
-    "api-key": "<your datatracker API key>"
+    "apikey": "<your datatracker API key>"
    }
    ```
 

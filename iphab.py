@@ -85,7 +85,7 @@ def run_sub(cmd, ignore_errors = False):
             subprocess.call(cmd)
         else:
             output = subprocess.check_output(cmd)
-    except e:
+    except Exception as e:
         os.chdir(cwd)
         raise e
     os.chdir(cwd)
@@ -333,7 +333,8 @@ def retrieve_comments(docname, reviewer):
     return status, overall, important, comments
     
 def ballot_draft(docname):
-    status, overall, important, comments = retrieve_comments(docname)
+    status, overall, important, comments = retrieve_comments(docname,
+                                                             RC["reviewer"])
     
     output = []
 
@@ -454,11 +455,12 @@ def update_drafts_inner(man, db):
                 continue
         # Either this is new or it's updated, so upload
         try:
+            debug("Trying to upload %s"%revision)
             revision = upload_revision(draft, version, revision)
             debug("Uploaded as revision=%s"%revision)
             NEW.append("%s-%s: %s"%(draft, version, revision))
             db[draft] = { "version" : version, "revision_id" : revision}
-        except e:
+        except Exception as e:
             print "Error: %s"%e
         save_db(DBNAME, db)
 

@@ -31,7 +31,7 @@ Email me if you want to share the existing instance.
 
 1. Check out the dummy IETF review at https://github.com/ekr/ietf-review
 
-1. Create the arcconfig in the repo. I use:
+1. Create the .arcconfig in the repo. I use:
 
    ```
    {
@@ -39,7 +39,7 @@ Email me if you want to share the existing instance.
    }
    ```
    
-1. Initialize arcanist in the repo. You'll want a daaemon account other than the one you use for
+1. Initialize arcanist in the repo. You'll want a daemon account other than the one you use for
    actual review, because you can't really review your own revisions. I use "ekr-moz" for this.
    Anyway ```arc install-certificate```.
 
@@ -72,7 +72,9 @@ iphab update-drafts
 ```
 
 It will take hours the first time, as it creates revisions for every
-ID, and minutes thereafter.
+ID, and minutes thereafter. You might want to disable email notifications
+(Settings -> Email Delivery) before running this the first time, or you will
+lots of emails! Reenable this after the first run...
 
 
 ## Managing the IESG Agenda

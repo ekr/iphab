@@ -10,6 +10,7 @@ import urllib
 import urllib2
 
 DRAFT_PATTERN="(draft-[a-zA-Z0-9-\._\+]+)-([0-9][0-9])$"
+DRAFT_PATTERN_TXT="(draft-[a-zA-Z0-9-\._\+]+)-([0-9][0-9])\.txt$"
 DBNAME = "drafts.db"
 DRAFTS_SUBDIR = "ids"
 GIT_REPO = "ietf-review"
@@ -55,6 +56,21 @@ def save_db(dbname, data):
 # Manage the drafts clone
 def sync_repo():
     subprocess.check_call(["rsync", "-avz", "rsync.ietf.org::internet-drafts", DRAFTS_SUBDIR])
+
+def read_ids_from_directory():
+    drafts = {}
+    filenames = os.listdir(DRAFTS_SUBDIR)
+    for file in filenames:
+        m = re.match(DRAFT_PATTERN_TXT, file)
+        if m is None:
+            continue
+        base = m.group(1)
+        rev = m.group(2)
+        if not base in drafts:
+            drafts[base] = rev
+        elif int(rev) > int(drafts[base]):
+            drafts[base] = rev
+    return drafts
     
 def read_id_manifest():
     fp = open(DRAFTS_SUBDIR + "/all_id2.txt")
@@ -234,6 +250,7 @@ def find_section(diff, line):
     return ""
                      
 def format_comment(diff, comment):
+    important_re = re.compile(r"IMPORTANT:\s*(.*)", re.DOTALL)
     context = 6
     important = False
     last_line = comment["fields"]["line"] - 1
@@ -244,7 +261,7 @@ def format_comment(diff, comment):
     txt += "\n"
     for c in comment["comments"]:
         raw = c["content"]["raw"]
-        m = re.match("IMPORTANT:\s*(.*)", raw)
+        m = important_re.match(raw)
         if m is not None:
             raw = m.group(1)
             important = True
@@ -436,7 +453,8 @@ def clear_requests(reviewer):
 # Master function
 def update_drafts():
     sync_repo()
-    man = read_id_manifest()
+    #man = read_id_manifest()
+    man = read_ids_from_directory()
     db = read_db(DBNAME)
     try:
         update_drafts_inner(man, db)

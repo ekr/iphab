@@ -487,23 +487,25 @@ def update_drafts_inner(man, db):
         print "   ", n
 
 
-def read_config_file():
+def read_config_file(config):
     global RC
-    rcf = open(".iphab.json", "r")
+    rcf = open(config, "r")
     RC = json.load(rcf)
 
 def ensure_config(k):
     if not k in RC:
         die("Value %s not configured"%k)
     return RC[k]
-        
-read_config_file()
+
 
 parser = argparse.ArgumentParser(description='Git for review')
 parser.add_argument('--verbose', dest='verbose', action='store_true')
+parser.add_argument('--config', dest='config', default=".iphab.json")
+                    
 subparsers = parser.add_subparsers(help="operation", dest="operation")
 subparser_update_drafts = subparsers.add_parser("update-drafts", help="Update the drafts")
 subparser_update_agenda = subparsers.add_parser("update-agenda", help="Update the agenda")
+subparser_update_agenda.add_argument("--no-update", dest="no_update", action='store_true', help="Don't update the drafts")
 subparser_add_reviewer = subparsers.add_parser("add-reviewer", help="Add a reviewer")
 subparser_ballot = subparsers.add_parser("ballot", help="Generate a ballot")
 subparser_ballot.add_argument("draft", nargs=1, help="draft-name")
@@ -516,12 +518,14 @@ subparser_clear = subparsers.add_parser("clear-requests")
 
 args = parser.parse_args()
 
+read_config_file(args.config)
 
 if args.operation ==  "update-drafts":
     update_drafts()
 elif args.operation == "update-agenda":
     ensure_config("reviewer")
-    update_drafts()
+    if not args.no_update:
+        update_drafts()
     update_agenda(RC["reviewer"])
 elif args.operation == "ballot":
     ballot_draft(args.draft[0])

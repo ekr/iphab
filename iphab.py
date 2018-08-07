@@ -125,7 +125,7 @@ def get_revision(output):
         m = re.search("Revision URI:.*(D\d+)$", l)
         if m is not None:
             return m.group(1)
-    raise "Couldn't parse arcanist output"
+    raise RuntimeError("Couldn't parse arcanist output")
 
     
 def upload_revision(draftname, version, revision_id):
@@ -161,11 +161,11 @@ def run_call_conduit(command, js):
     os.chdir(cwd)
     if err != "":
         print err
-        raise "Error doing call-conduit: %s"%err
+        raise RuntimeError("Error doing call-conduit: %s"%err)
     debug(out)
     jj = json.loads(out)
     if jj["error"] != None:
-        raise "Error doing call-conduit: %s"%err
+        raise RuntimeError("Error doing call-conduit: %s"%err)
     return jj
 
 def lookup_user(reviewer):

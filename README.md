@@ -123,6 +123,12 @@ with every other inline comment turned into the Comment portion.
 For NO-OBJECTION, the top comment, IMPORTANT comments, and other
 comments each get their own sections in a single text field.
 
+Right now this is regrettable not totally automated, so once you have
+done your review, you need to do:
+
+```
+iphab ballot <draft-name>
+```
 
 ## Clearing your Review Queue
 
